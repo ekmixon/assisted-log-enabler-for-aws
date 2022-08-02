@@ -35,8 +35,7 @@ region_list = ['af-south-1', 'ap-east-1', 'ap-south-1', 'ap-northeast-1', 'ap-no
 def random_string_generator():
     lower_letters = string.ascii_lowercase
     numbers = string.digits
-    unique_end = (''.join(random.choice(lower_letters + numbers) for char in range(6)))
-    return unique_end
+    return ''.join(random.choice(lower_letters + numbers) for _ in range(6))
 
 
 # 1. Create a Bucket and Lifecycle Policy
@@ -44,64 +43,78 @@ def create_bucket(unique_end):
     """Function to create the bucket for storing logs"""
     try:
         account_number = sts.get_caller_identity()["Account"]
-        logging.info("Creating bucket in %s" % account_number)
+        logging.info(f"Creating bucket in {account_number}")
         logging.info("CreateBucket API Call")
         if region == 'us-east-1':
             logging_bucket_dict = s3.create_bucket(
-                Bucket="aws-log-collection-" + account_number + "-" + region + "-" + unique_end
+                Bucket=f"aws-log-collection-{account_number}-{region}-{unique_end}"
             )
+
         else:
             logging_bucket_dict = s3.create_bucket(
-                Bucket="aws-log-collection-" + account_number + "-" + region + "-" + unique_end,
-                CreateBucketConfiguration={
-                    'LocationConstraint': region
-                }
+                Bucket=f"aws-log-collection-{account_number}-{region}-{unique_end}",
+                CreateBucketConfiguration={'LocationConstraint': region},
             )
+
         logging.info("Bucket Created.")
         logging.info("Setting lifecycle policy.")
         logging.info("PutBucketLifecycleConfiguration API Call")
         lifecycle_policy = s3.put_bucket_lifecycle_configuration(
-            Bucket="aws-log-collection-" + account_number + "-" + region + "-" + unique_end,
+            Bucket=f"aws-log-collection-{account_number}-{region}-{unique_end}",
             LifecycleConfiguration={
                 'Rules': [
                     {
-                        'Expiration': {
-                            'Days': 365
-                        },
+                        'Expiration': {'Days': 365},
                         'Status': 'Enabled',
                         'Prefix': '',
                         'ID': 'LogStorage',
                         'Transitions': [
-                            {
-                                'Days': 90,
-                                'StorageClass': 'INTELLIGENT_TIERING'
-                            }
-                        ]
+                            {'Days': 90, 'StorageClass': 'INTELLIGENT_TIERING'}
+                        ],
                     }
                 ]
-            }
+            },
         )
+
         logging.info("Lifecycle Policy successfully set.")
         logging.info("PutObject API Call")
         create_ct_path = s3.put_object(
-            Bucket="aws-log-collection-" + account_number + "-" + region + "-" + unique_end,
-            Key='cloudtrail/AWSLogs/' + account_number + '/')
+            Bucket=f"aws-log-collection-{account_number}-{region}-{unique_end}",
+            Key=f'cloudtrail/AWSLogs/{account_number}/',
+        )
+
         logging.info("PutBucketPolicy API Call")
         bucket_policy = s3.put_bucket_policy(
-            Bucket="aws-log-collection-" + account_number + "-" + region + "-" + unique_end,
-            Policy='{"Version": "2012-10-17", "Statement": [{"Sid": "AWSCloudTrailAclCheck20150319","Effect": "Allow","Principal": {"Service": "cloudtrail.amazonaws.com"},"Action": "s3:GetBucketAcl","Resource": "arn:aws:s3:::aws-log-collection-' + account_number + '-' + region + '-' + unique_end + '"},{"Sid": "AWSCloudTrailWrite20150319","Effect": "Allow","Principal": {"Service": "cloudtrail.amazonaws.com"},"Action": "s3:PutObject","Resource": "arn:aws:s3:::aws-log-collection-' + account_number + '-' + region + '-' + unique_end + '/cloudtrail/AWSLogs/' + account_number + '/*","Condition": {"StringEquals": {"s3:x-amz-acl": "bucket-owner-full-control"}}}]}'
+            Bucket=f"aws-log-collection-{account_number}-{region}-{unique_end}",
+            Policy='{"Version": "2012-10-17", "Statement": [{"Sid": "AWSCloudTrailAclCheck20150319","Effect": "Allow","Principal": {"Service": "cloudtrail.amazonaws.com"},"Action": "s3:GetBucketAcl","Resource": "arn:aws:s3:::aws-log-collection-'
+            + account_number
+            + '-'
+            + region
+            + '-'
+            + unique_end
+            + '"},{"Sid": "AWSCloudTrailWrite20150319","Effect": "Allow","Principal": {"Service": "cloudtrail.amazonaws.com"},"Action": "s3:PutObject","Resource": "arn:aws:s3:::aws-log-collection-'
+            + account_number
+            + '-'
+            + region
+            + '-'
+            + unique_end
+            + '/cloudtrail/AWSLogs/'
+            + account_number
+            + '/*","Condition": {"StringEquals": {"s3:x-amz-acl": "bucket-owner-full-control"}}}]}',
         )
+
         logging.info("Setting the S3 bucket Public Access to Blocked")
         logging.info("PutPublicAccessBlock API Call")
         bucket_private = s3.put_public_access_block(
-            Bucket="aws-log-collection-" + account_number + "-" + region + "-" + unique_end,
+            Bucket=f"aws-log-collection-{account_number}-{region}-{unique_end}",
             PublicAccessBlockConfiguration={
                 'BlockPublicAcls': True,
                 'IgnorePublicAcls': True,
                 'BlockPublicPolicy': True,
-                'RestrictPublicBuckets': True
+                'RestrictPublicBuckets': True,
             },
         )
+
     except Exception as exception_handle:
         logging.error(exception_handle)
     return account_number
@@ -112,34 +125,46 @@ def flow_log_activator(region_list, account_number, unique_end):
     """Function that turns on the VPC Flow Logs, for VPCs identifed without them"""
     for aws_region in region_list:
         ec2 = boto3.client('ec2', region_name=aws_region)
-        logging.info("Creating a list of VPCs without Flow Logs on in region " + aws_region + ".")
+        logging.info(
+            f"Creating a list of VPCs without Flow Logs on in region {aws_region}."
+        )
+
         try:
-            VPCList: list = []
-            FlowLogList: list = []
             logging.info("DescribeVpcs API Call")
             vpcs = ec2.describe_vpcs()
-            for vpc_id in vpcs["Vpcs"]:
-                VPCList.append(vpc_id["VpcId"])
-            logging.info("List of VPCs found within account " + account_number + ", region " + aws_region + ":")
+            VPCList: list = [vpc_id["VpcId"] for vpc_id in vpcs["Vpcs"]]
+            logging.info(
+                f"List of VPCs found within account {account_number}, region {aws_region}:"
+            )
+
             print(VPCList)
             logging.info("DescribeFlowLogs API Call")
             vpcflowloglist = ec2.describe_flow_logs()
-            for resource_id in vpcflowloglist["FlowLogs"]:
-                FlowLogList.append(resource_id["ResourceId"])
+            FlowLogList: list = [
+                resource_id["ResourceId"]
+                for resource_id in vpcflowloglist["FlowLogs"]
+            ]
+
             working_list = (list(set(VPCList) - set(FlowLogList)))
-            logging.info("List of VPCs found within account " + account_number + ", region " + aws_region + " WITHOUT VPC Flow Logs:")
+            logging.info(
+                f"List of VPCs found within account {account_number}, region {aws_region} WITHOUT VPC Flow Logs:"
+            )
+
             print(working_list)
             for no_logs in working_list:
-                logging.info(no_logs + " does not have VPC Flow logging on. It will be turned on within this function.")
+                logging.info(
+                    f"{no_logs} does not have VPC Flow logging on. It will be turned on within this function."
+                )
+
             logging.info("Activating logs for VPCs that do not have them turned on.")
             logging.info("If all VPCs have Flow Logs turned on, you will get an MissingParameter error. That is normal.")
             logging.info("CreateFlowLogs API Call")
-            flow_log_on =  ec2.create_flow_logs(
+            flow_log_on = ec2.create_flow_logs(
                 ResourceIds=working_list,
                 ResourceType='VPC',
                 TrafficType='ALL',
                 LogDestinationType='s3',
-                LogDestination='arn:aws:s3:::aws-log-collection-' + account_number + '-' + region + '-' + unique_end + '/vpcflowlogs',
+                LogDestination=f'arn:aws:s3:::aws-log-collection-{account_number}-{region}-{unique_end}/vpcflowlogs',
                 LogFormat='${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status} ${vpc-id} ${type} ${tcp-flags} ${subnet-id} ${sublocation-type} ${sublocation-id} ${region} ${pkt-srcaddr} ${pkt-dstaddr} ${instance-id} ${az-id} ${pkt-src-aws-service} ${pkt-dst-aws-service} ${flow-direction} ${traffic-path}',
                 TagSpecifications=[
                     {
@@ -147,12 +172,13 @@ def flow_log_activator(region_list, account_number, unique_end):
                         'Tags': [
                             {
                                 'Key': 'workflow',
-                                'Value': 'assisted-log-enabler'
+                                'Value': 'assisted-log-enabler',
                             },
-                        ]
+                        ],
                     }
-                ]
+                ],
             )
+
             logging.info("VPC Flow Logs are turned on.")
         except Exception as exception_handle:
             logging.error(exception_handle)
@@ -170,12 +196,13 @@ def check_cloudtrail(account_number, unique_end):
         if cloudtrail_status["trailList"][0]["Name"] == "":
             logging.info("CreateTrail API Call")
             cloudtrail_activate = cloudtrail.create_trail(
-                Name='assisted-log-enabler-ct-' + account_number,
-                S3BucketName="aws-log-collection-" + account_number + "-" + region + "-" + unique_end,
+                Name=f'assisted-log-enabler-ct-{account_number}',
+                S3BucketName=f"aws-log-collection-{account_number}-{region}-{unique_end}",
                 S3KeyPrefix='cloudtrail',
                 IsMultiRegionTrail=True,
-                EnableLogFileValidation=True
-                )
+                EnableLogFileValidation=True,
+            )
+
             cloudtrail_name = cloudtrail_activate["Name"]
             cloudtrail_arn = cloudtrail_activate["TrailARN"]
             logging.info("AddTags API Call")
@@ -192,11 +219,10 @@ def check_cloudtrail(account_number, unique_end):
             cloudtrail_on = cloudtrail.start_logging(
                 Name=cloudtrail_name
                 )
-            logging.info("Trail " + cloudtrail_name + " is created and active.")    
-            return
+            logging.info(f"Trail {cloudtrail_name} is created and active.")
         else:
             logging.info("There is a CloudTrail trail active. No action needed.")
-            return
+        return
     except Exception as exception_handle:
         logging.error(exception_handle)
 
@@ -205,13 +231,16 @@ def check_cloudtrail(account_number, unique_end):
 def eks_logging(region_list):
     """Function to turn on logging for EKS Clusters"""
     for aws_region in region_list:
-        logging.info("Turning on audit and authenticator logging for EKS clusters in region " + aws_region + ".")
+        logging.info(
+            f"Turning on audit and authenticator logging for EKS clusters in region {aws_region}."
+        )
+
         eks = boto3.client('eks', region_name=aws_region)
         try:
             logging.info("ListClusters API Call")
             eks_clusters = eks.list_clusters()
             eks_cluster_list = eks_clusters ['clusters']
-            logging.info("EKS Clusters found in " + aws_region + ":")
+            logging.info(f"EKS Clusters found in {aws_region}:")
             print(eks_cluster_list)
             for cluster in eks_cluster_list:
                 logging.info("UpdateClusterConfig API Call")
@@ -235,13 +264,25 @@ def eks_logging(region_list):
                     }
                 )
                 if eks_activate['update']['status'] == 'InProgress':
-                    logging.info(cluster + " EKS Cluster is currently updating. Status: InProgress")
+                    logging.info(
+                        f"{cluster} EKS Cluster is currently updating. Status: InProgress"
+                    )
+
                 elif eks_activate['update']['status'] == 'Failed':
-                    logging.info(cluster + " EKS Cluster failed to turn on logs. Please check if you have permissions to update the logging configuration of EKS. Status: Failed")
+                    logging.info(
+                        f"{cluster} EKS Cluster failed to turn on logs. Please check if you have permissions to update the logging configuration of EKS. Status: Failed"
+                    )
+
                 elif eks_activate['update']['status'] == 'Cancelled':
-                    logging.info(cluster + " EKS Cluster log update was cancelled. Status: Cancelled.")
+                    logging.info(
+                        f"{cluster} EKS Cluster log update was cancelled. Status: Cancelled."
+                    )
+
                 else:
-                    logging.info(cluster + " EKS Cluster has audit and authenticator logs turned on.")
+                    logging.info(
+                        f"{cluster} EKS Cluster has audit and authenticator logs turned on."
+                    )
+
         except Exception as exception_handle:
             logging.error(exception_handle)
 
@@ -250,44 +291,56 @@ def eks_logging(region_list):
 def route_53_query_logs(region_list, account_number, unique_end):
     """Function to turn on Route 53 Query Logs for VPCs"""
     for aws_region in region_list:
-        logging.info("Turning on Route 53 Query Logging on for VPCs in region " + aws_region + ".")
+        logging.info(
+            f"Turning on Route 53 Query Logging on for VPCs in region {aws_region}."
+        )
+
         ec2 = boto3.client('ec2', region_name=aws_region)
         route53resolver = boto3.client('route53resolver', region_name=aws_region)
         try:
-            VPCList: list = []
-            QueryLogList: list = []
             logging.info("DescribeVpcs API Call")
             vpcs = ec2.describe_vpcs()
-            for vpc_id in vpcs["Vpcs"]:
-                VPCList.append(vpc_id["VpcId"])
-            logging.info("List of VPCs found within account " + account_number + ", region " + aws_region + ":")
+            VPCList: list = [vpc_id["VpcId"] for vpc_id in vpcs["Vpcs"]]
+            logging.info(
+                f"List of VPCs found within account {account_number}, region {aws_region}:"
+            )
+
             print(VPCList)
             logging.info("ListResolverQueryLogConfigAssociations API Call")
             query_log_details = route53resolver.list_resolver_query_log_config_associations()
-            for query_log_vpc_id in query_log_details['ResolverQueryLogConfigAssociations']:
-                QueryLogList.append(query_log_vpc_id['ResourceId'])
+            QueryLogList: list = [
+                query_log_vpc_id['ResourceId']
+                for query_log_vpc_id in query_log_details[
+                    'ResolverQueryLogConfigAssociations'
+                ]
+            ]
+
             r53_working_list = (list(set(VPCList) - set(QueryLogList)))
-            logging.info("List of VPCs found within account " + account_number + ", region " + aws_region + " WITHOUT Route 53 Query Logs:")
+            logging.info(
+                f"List of VPCs found within account {account_number}, region {aws_region} WITHOUT Route 53 Query Logs:"
+            )
+
             print(r53_working_list)
             for no_query_logs in r53_working_list:
-                logging.info(no_query_logs + " does not have Route 53 Query logging on. It will be turned on within this function.")
+                logging.info(
+                    f"{no_query_logs} does not have Route 53 Query logging on. It will be turned on within this function."
+                )
+
             logging.info("Activating logs for VPCs that do not have Route 53 Query logging turned on.")
             logging.info("CreateResolverQueryLogConfig API Call")
             create_query_log = route53resolver.create_resolver_query_log_config(
-                Name='Assisted_Log_Enabler_Query_Logs_' + aws_region,
-                DestinationArn='arn:aws:s3:::aws-log-collection-' + account_number + '-' + region + '-' + unique_end + '/r53querylogs',
+                Name=f'Assisted_Log_Enabler_Query_Logs_{aws_region}',
+                DestinationArn=f'arn:aws:s3:::aws-log-collection-{account_number}-{region}-{unique_end}/r53querylogs',
                 CreatorRequestId=timestamp_date_string,
                 Tags=[
-                    {
-                        'Key': 'Workflow',
-                        'Value': 'assisted-log-enabler'
-                    },
-                ]
+                    {'Key': 'Workflow', 'Value': 'assisted-log-enabler'},
+                ],
             )
+
             r53_query_log_id = create_query_log['ResolverQueryLogConfig']['Id']
-            logging.info("Route 53 Query Logging Created. Resource ID:" + r53_query_log_id)
+            logging.info(f"Route 53 Query Logging Created. Resource ID:{r53_query_log_id}")
             for vpc in r53_working_list:
-                logging.info("Associating " + vpc + " with the created Route 53 Query Logging.")
+                logging.info(f"Associating {vpc} with the created Route 53 Query Logging.")
                 logging.info("AssociateResolverQueryLogConfig")
                 activate_r53_logs = route53resolver.associate_resolver_query_log_config(
                     ResolverQueryLogConfigId=r53_query_log_id,

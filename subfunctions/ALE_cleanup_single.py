@@ -34,72 +34,82 @@ def r53_cleanup():
     time.sleep(1)
     for aws_region in region_list:
         logging.info("---- LINE BREAK BETWEEN REGIONS ----")
-        logging.info("Cleaning up Route 53 Query Logging Resources in region " + aws_region + ".")
+        logging.info(
+            f"Cleaning up Route 53 Query Logging Resources in region {aws_region}."
+        )
+
         route53resolver = boto3.client('route53resolver', region_name=aws_region)
         try:
-            QueryLogList: list = []
             QueryLogArnRemoveList: list = []
             QueryLogIdRemoveList: list = []
             logging.info("ListResolverQueryLogConfigs API Call")
             ale_r53_logs = route53resolver.list_resolver_query_log_configs() # Collecting Arn of all Query Logs
-            for r53_arn in ale_r53_logs['ResolverQueryLogConfigs']:
-                QueryLogList.append(r53_arn['Arn'])
+            QueryLogList: list = [
+                r53_arn['Arn']
+                for r53_arn in ale_r53_logs['ResolverQueryLogConfigs']
+            ]
+
             for r53_tag_info in QueryLogList:
-                logging.info("Listing Tags for " + r53_tag_info)
+                logging.info(f"Listing Tags for {r53_tag_info}")
                 logging.info("ListTagsForResource API Call")
                 r53_tags = route53resolver.list_tags_for_resource( # Looking at tags for each Arn collected
                     ResourceArn=r53_tag_info
                 )
                 for value in r53_tags['Tags']:
                     if (value['Key'] == 'Workflow' and value['Value'] == 'assisted-log-enabler'):
-                        logging.info("The following Route 53 Query Logger was created by Assisted Log Enabler for AWS, and will be removed within this function: " + r53_tag_info)
+                        logging.info(
+                            f"The following Route 53 Query Logger was created by Assisted Log Enabler for AWS, and will be removed within this function: {r53_tag_info}"
+                        )
+
                         QueryLogArnRemoveList.append(r53_tag_info)
             for Id in QueryLogArnRemoveList:
                 logging.info("Gathering Resource ID for Route 53 Query Logging Resource to be removed.")
                 logging.info("ListResolverQueryLogConfigs API Call")
                 r53_resource_id = route53resolver.list_resolver_query_log_configs()['ResolverQueryLogConfigs'][QueryLogArnRemoveList.index(Id)]['Id'] # Collecting Resource ID for each Arn collected
                 QueryLogIdRemoveList.append(r53_resource_id)
-                logging.info(r53_resource_id + " added to removal list.")
+                logging.info(f"{r53_resource_id} added to removal list.")
             logging.info("The following Resource IDs were created by Assisted Log Enabler for AWS, and will be removed within this function.")
             print(QueryLogIdRemoveList)
             for r53_remove in QueryLogIdRemoveList:
-                logging.info("Gathering Query Log Config Associations for " + r53_remove)
+                logging.info(f"Gathering Query Log Config Associations for {r53_remove}")
                 logging.info("ListResolverQueryLogConfigAssociations API Call")
                 associated_vpcs = route53resolver.list_resolver_query_log_config_associations(
                 )
                 if associated_vpcs['TotalCount'] > 0 and associated_vpcs['ResolverQueryLogConfigAssociations'][0]['ResolverQueryLogConfigId'] == r53_remove:
-                    logging.info("The following Route 53 Query Logger is associated with a VPC, and will be removed within this function: " + r53_remove)
-                    VPCRemovalList = []
-                    for vpc_info in associated_vpcs['ResolverQueryLogConfigAssociations']:
-                        VPCRemovalList.append(vpc_info['ResourceId'])
+                    logging.info(
+                        f"The following Route 53 Query Logger is associated with a VPC, and will be removed within this function: {r53_remove}"
+                    )
+
+                    VPCRemovalList = [
+                        vpc_info['ResourceId']
+                        for vpc_info in associated_vpcs[
+                            'ResolverQueryLogConfigAssociations'
+                        ]
+                    ]
+
                     logging.info("List of VPCs to be disassociated:")
                     print(VPCRemovalList)
                     for vpc in VPCRemovalList:
-                        logging.info("Removing " + vpc + " from Route 53 Query Logging configuration " + r53_remove)
+                        logging.info(
+                            f"Removing {vpc} from Route 53 Query Logging configuration {r53_remove}"
+                        )
+
                         logging.info("DisassociateResolverQueryLogConfig API Call")
                         removing_vpc = route53resolver.disassociate_resolver_query_log_config(
                             ResolverQueryLogConfigId=r53_remove,
                             ResourceId=vpc
                         )
-                        logging.info(vpc + " removed from " + r53_remove)
+                        logging.info(f"{vpc} removed from {r53_remove}")
                         time.sleep(1)
                     logging.info("60 second pause to ensure disassociation of Amazon VPCs...")
                     time.sleep(60)
-                    logging.info("Removing Route 53 Query Logger: " + r53_remove)
-                    logging.info("DeleteResolverQueryLogConfig")
-                    r53_cleanup = route53resolver.delete_resolver_query_log_config(
-                        ResolverQueryLogConfigId=r53_remove
-                    )
-                    logging.info(r53_remove + " has been removed.")
-                    time.sleep(2)
-                else:
-                    logging.info("Removing Route 53 Query Logger: " + r53_remove)
-                    logging.info("DeleteResolverQueryLogConfig")
-                    r53_cleanup = route53resolver.delete_resolver_query_log_config(
-                        ResolverQueryLogConfigId=r53_remove
-                    )
-                    logging.info(r53_remove + " has been removed.")
-                    time.sleep(2)
+                logging.info(f"Removing Route 53 Query Logger: {r53_remove}")
+                logging.info("DeleteResolverQueryLogConfig")
+                r53_cleanup = route53resolver.delete_resolver_query_log_config(
+                    ResolverQueryLogConfigId=r53_remove
+                )
+                logging.info(f"{r53_remove} has been removed.")
+                time.sleep(2)
         except Exception as exception_handle:
             logging.error(exception_handle)
 
@@ -110,12 +120,13 @@ def cloudtrail_cleanup():
     logging.info("Cleaning up CloudTrail Logs.")
     try:
         logging.info("Cleaning up CloudTrail Logs created by Assisted Log Enabler for AWS.")
-        trail_list: list = []
         removal_list: list = []
         logging.info("DescribeTrails API Call")
         cloudtrail_trails = cloudtrail.describe_trails()
-        for trail in cloudtrail_trails['trailList']:
-            trail_list.append(trail['TrailARN'])
+        trail_list: list = [
+            trail['TrailARN'] for trail in cloudtrail_trails['trailList']
+        ]
+
         logging.info("Listing CloudTrail trails created by Assisted Log Enabler for AWS.")
         print("Full trail list")
         print(trail_list)
@@ -138,7 +149,7 @@ def cloudtrail_cleanup():
             cloudtrail.delete_trail(
                 Name=delete_trail
             )
-            logging.info(delete_trail + " has been deleted.")
+            logging.info(f"{delete_trail} has been deleted.")
             time.sleep(1)
     except Exception as exception_handle:
         logging.error(exception_handle)
@@ -151,7 +162,10 @@ def vpcflow_cleanup():
     for aws_region in region_list:
         try:
             logging.info("---- LINE BREAK BETWEEN REGIONS ----")
-            logging.info("Cleaning up VPC Flow Logs created by Assisted Log Enabler for AWS in region " + aws_region + ".")
+            logging.info(
+                f"Cleaning up VPC Flow Logs created by Assisted Log Enabler for AWS in region {aws_region}."
+            )
+
             removal_list: list = []
             ec2 = boto3.client('ec2', region_name=aws_region)
             logging.info("DescribeFlowLogs API Call")

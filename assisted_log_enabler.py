@@ -31,7 +31,7 @@ logFormatter = '%(asctime)s - %(levelname)s - %(message)s'
 logging.basicConfig(format=logFormatter, level=logging.INFO)
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-output_handle = logging.FileHandler('ALE_' + timestamp_date_string + '.log')
+output_handle = logging.FileHandler(f'ALE_{timestamp_date_string}.log')
 output_handle.setLevel(logging.INFO)
 logger.addHandler(output_handle)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -68,7 +68,7 @@ def banner():
 
 def assisted_log_enabler():
     """Function to run Assisted Log Enabler"""
-    output_handle = logging.FileHandler('ALE_' + timestamp_date_string + '.log')
+    output_handle = logging.FileHandler(f'ALE_{timestamp_date_string}.log')
     output_handle.setLevel(logging.INFO)
     logger.addHandler(output_handle)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -76,7 +76,7 @@ def assisted_log_enabler():
 
     parser = argparse.ArgumentParser(description='Assisted Log Enabler - Find resources that are not logging, and turn them on.')
     parser.add_argument('--mode',help=' Choose the mode that you want to run Assisted Log Enabler in. Available modes: single_account, multi_account. WARNING: For multi_account, You must have the associated CloudFormation template deployed as a StackSet. See the README file for more details.')
-    
+
     function_parser_group = parser.add_argument_group('Service Options', 'Use these flags to choose which services you want to turn logging on for.')
     function_parser_group.add_argument('--all', action='store_true', help=' Turns on all of the log types within the Assisted Log Enabler for AWS.')
     function_parser_group.add_argument('--eks', action='store_true', help=' Turns on Amazon EKS audit & authenticator logs.')

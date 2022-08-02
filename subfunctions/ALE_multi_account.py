@@ -38,18 +38,18 @@ region_list = ['af-south-1', 'ap-east-1', 'ap-south-1', 'ap-northeast-1', 'ap-no
 def random_string_generator():
     lower_letters = string.ascii_lowercase
     numbers = string.digits
-    unique_end = (''.join(random.choice(lower_letters + numbers) for char in range(6)))
-    return unique_end
+    return ''.join(random.choice(lower_letters + numbers) for _ in range(6))
 
 
 # 1. Obtain the AWS Accounts inside of AWS Organizations
 def org_account_grab():
     """Function to list accounts inside of AWS Organizations"""
     try:
-        OrgAccountIdList: list = []
         org_account_list = organizations.list_accounts()
-        for accounts in org_account_list['Accounts']:
-            OrgAccountIdList.append(accounts['Id'])
+        OrgAccountIdList: list = [
+            accounts['Id'] for accounts in org_account_list['Accounts']
+        ]
+
         get_organization_id = organizations.describe_organization()
         organization_id = get_organization_id['Organization']['Id']
     except Exception as exception_handle:
@@ -64,8 +64,7 @@ def org_account_grab():
 def get_account_number():
     """Function to grab AWS Account number that Assisted Log Enabler runs from."""
     sts = boto3.client('sts')
-    account_number = sts.get_caller_identity()["Account"]
-    return account_number
+    return sts.get_caller_identity()["Account"]
 
 
 # 3. Create a Bucket and Lifecycle Policy
@@ -76,52 +75,91 @@ def create_bucket(organization_id, account_number, unique_end):
         logging.info("CreateBucket API Call")
         if region == 'us-east-1':
             logging_bucket_dict = s3.create_bucket(
-                Bucket="aws-log-collection-" + account_number + "-" + region + "-" + unique_end
+                Bucket=f"aws-log-collection-{account_number}-{region}-{unique_end}"
             )
+
         else:
             logging_bucket_dict = s3.create_bucket(
-                Bucket="aws-log-collection-" + account_number + "-" + region + "-" + unique_end,
-                CreateBucketConfiguration={
-                    'LocationConstraint': region
-                }
+                Bucket=f"aws-log-collection-{account_number}-{region}-{unique_end}",
+                CreateBucketConfiguration={'LocationConstraint': region},
             )
+
         logging.info("Bucket Created.")
         logging.info("Setting lifecycle policy.")
         lifecycle_policy = s3.put_bucket_lifecycle_configuration(
-            Bucket="aws-log-collection-" + account_number + "-" + region + "-" + unique_end,
+            Bucket=f"aws-log-collection-{account_number}-{region}-{unique_end}",
             LifecycleConfiguration={
                 'Rules': [
                     {
-                        'Expiration': {
-                            'Days': 365
-                        },
+                        'Expiration': {'Days': 365},
                         'Status': 'Enabled',
                         'Prefix': '',
                         'ID': 'LogStorage',
                         'Transitions': [
-                            {
-                                'Days': 90,
-                                'StorageClass': 'INTELLIGENT_TIERING'
-                            }
-                        ]
+                            {'Days': 90, 'StorageClass': 'INTELLIGENT_TIERING'}
+                        ],
                     }
                 ]
-            }
+            },
         )
+
         logging.info("Lifecycle Policy successfully set.")
         create_ct_path = s3.put_object(
-            Bucket="aws-log-collection-" + account_number + "-" + region + "-" + unique_end,
-            Key='cloudtrail/AWSLogs/' + account_number + '/')
-        create_ct_path_vpc = s3.put_object(
-            Bucket="aws-log-collection-" + account_number + "-" + region + "-" + unique_end,
-            Key='vpcflowlogs/')
-        create_ct_path_r53 = s3.put_object(
-            Bucket="aws-log-collection-" + account_number + "-" + region + "-" + unique_end,
-            Key='r53querylogs/')
-        bucket_policy = s3.put_bucket_policy(
-            Bucket="aws-log-collection-" + account_number + "-" + region + "-" + unique_end,
-            Policy='{"Version": "2012-10-17", "Statement": [{"Sid": "AWSCloudTrailAclCheck20150319","Effect": "Allow","Principal": {"Service": "cloudtrail.amazonaws.com"},"Action": "s3:GetBucketAcl","Resource": "arn:aws:s3:::aws-log-collection-' + account_number + '-' + region + '-' + unique_end + '"},{"Sid": "AWSCloudTrailWrite20150319","Effect": "Allow","Principal": {"Service": "cloudtrail.amazonaws.com"},"Action": "s3:PutObject","Resource": "arn:aws:s3:::aws-log-collection-' + account_number + '-' + region + '-' + unique_end + '/cloudtrail/AWSLogs/' + account_number + '/*","Condition": {"StringEquals": {"s3:x-amz-acl": "bucket-owner-full-control"}}},{"Sid": "AWSLogDeliveryAclCheck","Effect": "Allow","Principal": {"Service": "delivery.logs.amazonaws.com"},"Action": "s3:GetBucketAcl","Resource": "arn:aws:s3:::aws-log-collection-' + account_number + '-' + region + '-' + unique_end + '"},{"Sid": "AWSLogDeliveryWriteVPC","Effect": "Allow","Principal": {"Service": "delivery.logs.amazonaws.com"},"Action": "s3:PutObject","Resource": "arn:aws:s3:::aws-log-collection-' + account_number + '-' + region + '-' + unique_end + '/vpcflowlogs/*","Condition": {"StringEquals": {"s3:x-amz-acl": "bucket-owner-full-control"}}},{"Sid": "AWSLogDeliveryWriteR53","Effect": "Allow","Principal": {"Service": "delivery.logs.amazonaws.com"},"Action": "s3:PutObject","Resource": "arn:aws:s3:::aws-log-collection-' + account_number + '-' + region + '-' + unique_end + '/r53querylogs/*","Condition": {"StringEquals": {"s3:x-amz-acl": "bucket-owner-full-control"}}}]}'
+            Bucket=f"aws-log-collection-{account_number}-{region}-{unique_end}",
+            Key=f'cloudtrail/AWSLogs/{account_number}/',
         )
+
+        create_ct_path_vpc = s3.put_object(
+            Bucket=f"aws-log-collection-{account_number}-{region}-{unique_end}",
+            Key='vpcflowlogs/',
+        )
+
+        create_ct_path_r53 = s3.put_object(
+            Bucket=f"aws-log-collection-{account_number}-{region}-{unique_end}",
+            Key='r53querylogs/',
+        )
+
+        bucket_policy = s3.put_bucket_policy(
+            Bucket=f"aws-log-collection-{account_number}"
+            + "-"
+            + region
+            + "-"
+            + unique_end,
+            Policy='{"Version": "2012-10-17", "Statement": [{"Sid": "AWSCloudTrailAclCheck20150319","Effect": "Allow","Principal": {"Service": "cloudtrail.amazonaws.com"},"Action": "s3:GetBucketAcl","Resource": "arn:aws:s3:::aws-log-collection-'
+            + account_number
+            + '-'
+            + region
+            + '-'
+            + unique_end
+            + '"},{"Sid": "AWSCloudTrailWrite20150319","Effect": "Allow","Principal": {"Service": "cloudtrail.amazonaws.com"},"Action": "s3:PutObject","Resource": "arn:aws:s3:::aws-log-collection-'
+            + account_number
+            + '-'
+            + region
+            + '-'
+            + unique_end
+            + '/cloudtrail/AWSLogs/'
+            + account_number
+            + '/*","Condition": {"StringEquals": {"s3:x-amz-acl": "bucket-owner-full-control"}}},{"Sid": "AWSLogDeliveryAclCheck","Effect": "Allow","Principal": {"Service": "delivery.logs.amazonaws.com"},"Action": "s3:GetBucketAcl","Resource": "arn:aws:s3:::aws-log-collection-'
+            + account_number
+            + '-'
+            + region
+            + '-'
+            + unique_end
+            + '"},{"Sid": "AWSLogDeliveryWriteVPC","Effect": "Allow","Principal": {"Service": "delivery.logs.amazonaws.com"},"Action": "s3:PutObject","Resource": "arn:aws:s3:::aws-log-collection-'
+            + account_number
+            + '-'
+            + region
+            + '-'
+            + unique_end
+            + '/vpcflowlogs/*","Condition": {"StringEquals": {"s3:x-amz-acl": "bucket-owner-full-control"}}},{"Sid": "AWSLogDeliveryWriteR53","Effect": "Allow","Principal": {"Service": "delivery.logs.amazonaws.com"},"Action": "s3:PutObject","Resource": "arn:aws:s3:::aws-log-collection-'
+            + account_number
+            + '-'
+            + region
+            + '-'
+            + unique_end
+            + '/r53querylogs/*","Condition": {"StringEquals": {"s3:x-amz-acl": "bucket-owner-full-control"}}}]}',
+        )
+
         logging.info("Setting the S3 bucket Public Access to Blocked")
         logging.info("PutPublicAccessBlock API Call")
         bucket_private = s3.put_public_access_block(
@@ -145,8 +183,8 @@ def flow_log_activator(account_number, OrgAccountIdList, region_list, unique_end
     for org_account in OrgAccountIdList:
         for aws_region in region_list:
             sts = boto3.client('sts')
-            RoleArn = 'arn:aws:iam::%s:role/Assisted_Log_Enabler_IAM_Role' % org_account
-            logging.info('Assuming Target Role %s for Assisted Log Enabler...' % RoleArn)
+            RoleArn = f'arn:aws:iam::{org_account}:role/Assisted_Log_Enabler_IAM_Role'
+            logging.info(f'Assuming Target Role {RoleArn} for Assisted Log Enabler...')
             assisted_log_enabler_sts = sts.assume_role(
                 RoleArn=RoleArn,
                 RoleSessionName='assisted-log-enabler-activation',
@@ -159,37 +197,50 @@ def flow_log_activator(account_number, OrgAccountIdList, region_list, unique_end
             aws_session_token=assisted_log_enabler_sts['Credentials']['SessionToken'],
             region_name=aws_region
             )
-            logging.info("Creating a list of VPCs without Flow Logs on in region " + aws_region + ".")
+            logging.info(
+                f"Creating a list of VPCs without Flow Logs on in region {aws_region}."
+            )
+
             try:
-                VPCList: list = []
-                FlowLogList: list = []
                 logging.info("DescribeVpcs API Call")
                 vpcs = ec2_ma.describe_vpcs()
-                for vpc_id in vpcs["Vpcs"]:
-                    VPCList.append(vpc_id["VpcId"])
-                logging.info("List of VPCs found within account " + org_account + ", region " + aws_region + ":")
+                VPCList: list = [vpc_id["VpcId"] for vpc_id in vpcs["Vpcs"]]
+                logging.info(
+                    f"List of VPCs found within account {org_account}, region {aws_region}:"
+                )
+
                 print(VPCList)
                 vpcflowloglist = ec2_ma.describe_flow_logs()
                 logging.info("DescribeFlowLogs API Call")
-                for resource_id in vpcflowloglist["FlowLogs"]:
-                    FlowLogList.append(resource_id["ResourceId"])
+                FlowLogList: list = [
+                    resource_id["ResourceId"]
+                    for resource_id in vpcflowloglist["FlowLogs"]
+                ]
+
                 working_list = (list(set(VPCList) - set(FlowLogList)))
-                logging.info("List of VPCs found within account " + org_account + ", region " + aws_region + " WITHOUT VPC Flow Logs:")
+                logging.info(
+                    f"List of VPCs found within account {org_account}, region {aws_region} WITHOUT VPC Flow Logs:"
+                )
+
                 print(working_list)
                 for no_logs in working_list:
-                    logging.info(no_logs + " does not have VPC Flow logging on. It will be turned on within this function.")
+                    logging.info(
+                        f"{no_logs} does not have VPC Flow logging on. It will be turned on within this function."
+                    )
+
                 logging.info("Activating logs for VPCs that do not have them turned on.")
                 logging.info("If all VPCs have Flow Logs turned on, you will get an MissingParameter error. That is normal.")
                 logging.info("CreateFlowLogs API Call")
-                flow_log_on =  ec2_ma.create_flow_logs(
+                flow_log_on = ec2_ma.create_flow_logs(
                     ResourceIds=working_list,
                     ResourceType='VPC',
                     TrafficType='ALL',
                     LogDestinationType='s3',
-                    LogDestination='arn:aws:s3:::aws-log-collection-' + account_number + '-' + region + '-' + unique_end + '/vpcflowlogs',
-                    LogFormat='${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status} ${vpc-id} ${type} ${tcp-flags} ${subnet-id} ${sublocation-type} ${sublocation-id} ${region} ${pkt-srcaddr} ${pkt-dstaddr} ${instance-id} ${az-id} ${pkt-src-aws-service} ${pkt-dst-aws-service} ${flow-direction} ${traffic-path}'
+                    LogDestination=f'arn:aws:s3:::aws-log-collection-{account_number}-{region}-{unique_end}/vpcflowlogs',
+                    LogFormat='${version} ${account-id} ${interface-id} ${srcaddr} ${dstaddr} ${srcport} ${dstport} ${protocol} ${packets} ${bytes} ${start} ${end} ${action} ${log-status} ${vpc-id} ${type} ${tcp-flags} ${subnet-id} ${sublocation-type} ${sublocation-id} ${region} ${pkt-srcaddr} ${pkt-dstaddr} ${instance-id} ${az-id} ${pkt-src-aws-service} ${pkt-dst-aws-service} ${flow-direction} ${traffic-path}',
                 )
-                logging.info("VPC Flow Logs are turned on for account " + org_account + ".")
+
+                logging.info(f"VPC Flow Logs are turned on for account {org_account}.")
             except Exception as exception_handle:
                 logging.error(exception_handle)
 
@@ -199,10 +250,13 @@ def eks_logging(region_list, OrgAccountIdList):
     """Function to turn on logging for EKS Clusters"""
     for org_account in OrgAccountIdList:
         for aws_region in region_list:
-            logging.info("Turning on audit and authenticator logging for EKS clusters in AWS account " + org_account + ", in region " + aws_region + ".")
+            logging.info(
+                f"Turning on audit and authenticator logging for EKS clusters in AWS account {org_account}, in region {aws_region}."
+            )
+
             sts = boto3.client('sts')
-            RoleArn = 'arn:aws:iam::%s:role/Assisted_Log_Enabler_IAM_Role' % org_account
-            logging.info('Assuming Target Role %s for Assisted Log Enabler...' % RoleArn)
+            RoleArn = f'arn:aws:iam::{org_account}:role/Assisted_Log_Enabler_IAM_Role'
+            logging.info(f'Assuming Target Role {RoleArn} for Assisted Log Enabler...')
             assisted_log_enabler_sts = sts.assume_role(
                 RoleArn=RoleArn,
                 RoleSessionName='assisted-log-enabler-activation',
@@ -219,7 +273,7 @@ def eks_logging(region_list, OrgAccountIdList):
                 logging.info("ListClusters API Call")
                 eks_clusters = eks_ma.list_clusters()
                 eks_cluster_list = eks_clusters ['clusters']
-                logging.info("EKS Clusters found in " + aws_region + ":")
+                logging.info(f"EKS Clusters found in {aws_region}:")
                 print(eks_cluster_list)
                 for cluster in eks_cluster_list:
                     logging.info("UpdateClusterConfig API Call")
@@ -243,13 +297,25 @@ def eks_logging(region_list, OrgAccountIdList):
                         }
                     )
                     if eks_activate['update']['status'] == 'InProgress':
-                        logging.info(cluster + " EKS Cluster is currently updating. Status: InProgress")
+                        logging.info(
+                            f"{cluster} EKS Cluster is currently updating. Status: InProgress"
+                        )
+
                     elif eks_activate['update']['status'] == 'Failed':
-                        logging.info(cluster + " EKS Cluster failed to turn on logs. Please check if you have permissions to update the logging configuration of EKS. Status: Failed")
+                        logging.info(
+                            f"{cluster} EKS Cluster failed to turn on logs. Please check if you have permissions to update the logging configuration of EKS. Status: Failed"
+                        )
+
                     elif eks_activate['update']['status'] == 'Cancelled':
-                        logging.info(cluster + " EKS Cluster log update was cancelled. Status: Cancelled.")
+                        logging.info(
+                            f"{cluster} EKS Cluster log update was cancelled. Status: Cancelled."
+                        )
+
                     else:
-                        logging.info(cluster + " EKS Cluster has audit and authenticator logs turned on.")
+                        logging.info(
+                            f"{cluster} EKS Cluster has audit and authenticator logs turned on."
+                        )
+
             except Exception as exception_handle:
                 logging.error(exception_handle)
 
@@ -259,10 +325,13 @@ def route_53_query_logs(region_list, account_number, OrgAccountIdList, unique_en
     """Function to turn on Route 53 Query Logs for VPCs"""
     for org_account in OrgAccountIdList:
         for aws_region in region_list:
-            logging.info("Turning on Route 53 Query Logging on in AWS Account " + org_account + " VPCs, in region " + aws_region + ".")
+            logging.info(
+                f"Turning on Route 53 Query Logging on in AWS Account {org_account} VPCs, in region {aws_region}."
+            )
+
             sts = boto3.client('sts')
-            RoleArn = 'arn:aws:iam::%s:role/Assisted_Log_Enabler_IAM_Role' % org_account
-            logging.info('Assuming Target Role %s for Assisted Log Enabler...' % RoleArn)
+            RoleArn = f'arn:aws:iam::{org_account}:role/Assisted_Log_Enabler_IAM_Role'
+            logging.info(f'Assuming Target Role {RoleArn} for Assisted Log Enabler...')
             assisted_log_enabler_sts = sts.assume_role(
                 RoleArn=RoleArn,
                 RoleSessionName='assisted-log-enabler-activation',
@@ -283,40 +352,49 @@ def route_53_query_logs(region_list, account_number, OrgAccountIdList, unique_en
             region_name=aws_region
             )
             try:
-                VPCList: list = []
-                QueryLogList: list = []
                 logging.info("DescribeVpcs API Call")
                 vpcs = ec2_ma.describe_vpcs()
-                for vpc_id in vpcs["Vpcs"]:
-                    VPCList.append(vpc_id["VpcId"])
-                logging.info("List of VPCs found within account " + org_account + ", region " + aws_region + ":")
+                VPCList: list = [vpc_id["VpcId"] for vpc_id in vpcs["Vpcs"]]
+                logging.info(
+                    f"List of VPCs found within account {org_account}, region {aws_region}:"
+                )
+
                 print(VPCList)
                 logging.info("ListResolverQueryLogConfigAssociations API Call")
                 query_log_details = route53resolver_ma.list_resolver_query_log_config_associations()
-                for query_log_vpc_id in query_log_details['ResolverQueryLogConfigAssociations']:
-                    QueryLogList.append(query_log_vpc_id['ResourceId'])
+                QueryLogList: list = [
+                    query_log_vpc_id['ResourceId']
+                    for query_log_vpc_id in query_log_details[
+                        'ResolverQueryLogConfigAssociations'
+                    ]
+                ]
+
                 r53_working_list = (list(set(VPCList) - set(QueryLogList)))
-                logging.info("List of VPCs found within account " + org_account + ", region " + aws_region + " WITHOUT Route 53 Query Logs:")
+                logging.info(
+                    f"List of VPCs found within account {org_account}, region {aws_region} WITHOUT Route 53 Query Logs:"
+                )
+
                 print(r53_working_list)
                 for no_query_logs in r53_working_list:
-                    logging.info(no_query_logs + " does not have Route 53 Query logging on. It will be turned on within this function.")
+                    logging.info(
+                        f"{no_query_logs} does not have Route 53 Query logging on. It will be turned on within this function."
+                    )
+
                 logging.info("Activating logs for VPCs that do not have Route 53 Query logging turned on.")
                 logging.info("CreateResolverQueryLogConfig API Call")
                 create_query_log = route53resolver_ma.create_resolver_query_log_config(
-                    Name='Assisted_Log_Enabler_Query_Logs_' + aws_region,
-                    DestinationArn='arn:aws:s3:::aws-log-collection-' + account_number + '-' + region + '-' + unique_end + '/r53querylogs',
+                    Name=f'Assisted_Log_Enabler_Query_Logs_{aws_region}',
+                    DestinationArn=f'arn:aws:s3:::aws-log-collection-{account_number}-{region}-{unique_end}/r53querylogs',
                     CreatorRequestId=timestamp_date_string,
                     Tags=[
-                        {
-                            'Key': 'Workflow',
-                            'Value': 'assisted-log-enabler'
-                        },
-                    ]
+                        {'Key': 'Workflow', 'Value': 'assisted-log-enabler'},
+                    ],
                 )
+
                 r53_query_log_id = create_query_log['ResolverQueryLogConfig']['Id']
-                logging.info("Route 53 Query Logging Created. Resource ID:" + r53_query_log_id)
+                logging.info(f"Route 53 Query Logging Created. Resource ID:{r53_query_log_id}")
                 for vpc in r53_working_list:
-                    logging.info("Associating " + vpc + " with the created Route 53 Query Logging.")
+                    logging.info(f"Associating {vpc} with the created Route 53 Query Logging.")
                     logging.info("AssocateResolverQueryLogConfig")
                     activate_r5_logs = route53resolver_ma.associate_resolver_query_log_config(
                         ResolverQueryLogConfigId=r53_query_log_id,

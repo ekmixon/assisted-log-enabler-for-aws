@@ -36,25 +36,37 @@ def dryrun_flow_log_activator(region_list, account_number):
     """Function that turns on the VPC Flow Logs, for VPCs identifed without them"""
     for aws_region in region_list:
         ec2 = boto3.client('ec2', region_name=aws_region)
-        logging.info("Creating a list of VPCs without Flow Logs on in region " + aws_region + ".")
+        logging.info(
+            f"Creating a list of VPCs without Flow Logs on in region {aws_region}."
+        )
+
         try:
-            VPCList: list = []
-            FlowLogList: list = []
             logging.info("DescribeVpcs API Call")
             vpcs = ec2.describe_vpcs()
-            for vpc_id in vpcs["Vpcs"]:
-                VPCList.append(vpc_id["VpcId"])
-            logging.info("List of VPCs found within account " + account_number + ", region " + aws_region + ":")
+            VPCList: list = [vpc_id["VpcId"] for vpc_id in vpcs["Vpcs"]]
+            logging.info(
+                f"List of VPCs found within account {account_number}, region {aws_region}:"
+            )
+
             print(VPCList)
             logging.info("DescribeFlowLogs API Call")
             vpcflowloglist = ec2.describe_flow_logs()
-            for resource_id in vpcflowloglist["FlowLogs"]:
-                FlowLogList.append(resource_id["ResourceId"])
+            FlowLogList: list = [
+                resource_id["ResourceId"]
+                for resource_id in vpcflowloglist["FlowLogs"]
+            ]
+
             working_list = (list(set(VPCList) - set(FlowLogList)))
-            logging.info("List of VPCs found within account " + account_number + ", region " + aws_region + " WITHOUT VPC Flow Logs:")
+            logging.info(
+                f"List of VPCs found within account {account_number}, region {aws_region} WITHOUT VPC Flow Logs:"
+            )
+
             print(working_list)
             for no_logs in working_list:
-                logging.info(no_logs + " does not have VPC Flow logging on. This will not be turned on within the Dry Run option.")
+                logging.info(
+                    f"{no_logs} does not have VPC Flow logging on. This will not be turned on within the Dry Run option."
+                )
+
         except Exception as exception_handle:
             logging.error(exception_handle)
 
@@ -72,7 +84,7 @@ def dryrun_check_cloudtrail(account_number):
             logging.info("There is no CloudTrail trail created within this account. Running Assisted Log Enabler for AWS will create the CloudTrail trail for this account.")
         else:
             cloudtrail_name = cloudtrail_status["trailList"][0]["Name"]
-            logging.info("There is a CloudTrail trail active. Name: " + cloudtrail_name)
+            logging.info(f"There is a CloudTrail trail active. Name: {cloudtrail_name}")
     except Exception as exception_handle:
         logging.error(exception_handle)
 
@@ -80,16 +92,22 @@ def dryrun_check_cloudtrail(account_number):
 def dryrun_eks_logging(region_list):
     """Function to turn on logging for EKS Clusters"""
     for aws_region in region_list:
-        logging.info("Turning on audit and authenticator logging for EKS clusters in region " + aws_region + ".")
+        logging.info(
+            f"Turning on audit and authenticator logging for EKS clusters in region {aws_region}."
+        )
+
         eks = boto3.client('eks', region_name=aws_region)
         try:
             logging.info("ListClusters API Call")
             eks_clusters = eks.list_clusters()
             eks_cluster_list = eks_clusters ['clusters']
-            logging.info("EKS Clusters found in " + aws_region + ":")
+            logging.info(f"EKS Clusters found in {aws_region}:")
             print(eks_cluster_list)
             for cluster in eks_cluster_list:
-                logging.info("Please check if Audit and Authenticator logs are on for EKS Cluster " + cluster)
+                logging.info(
+                    f"Please check if Audit and Authenticator logs are on for EKS Cluster {cluster}"
+                )
+
         except Exception as exception_handle:
             logging.error(exception_handle)
 
@@ -98,27 +116,41 @@ def dryrun_eks_logging(region_list):
 def dryrun_route_53_query_logs(region_list, account_number):
     """Function to turn on Route 53 Query Logs for VPCs"""
     for aws_region in region_list:
-        logging.info("Turning on Route 53 Query Logging on for VPCs in region " + aws_region + ".")
+        logging.info(
+            f"Turning on Route 53 Query Logging on for VPCs in region {aws_region}."
+        )
+
         ec2 = boto3.client('ec2', region_name=aws_region)
         route53resolver = boto3.client('route53resolver', region_name=aws_region)
         try:
-            VPCList: list = []
-            QueryLogList: list = []
             logging.info("DescribeVpcs API Call")
             vpcs = ec2.describe_vpcs()
-            for vpc_id in vpcs["Vpcs"]:
-                VPCList.append(vpc_id["VpcId"])
-            logging.info("List of VPCs found within account " + account_number + ", region " + aws_region + ":")
+            VPCList: list = [vpc_id["VpcId"] for vpc_id in vpcs["Vpcs"]]
+            logging.info(
+                f"List of VPCs found within account {account_number}, region {aws_region}:"
+            )
+
             print(VPCList)
             logging.info("ListResolverQueryLogConfigAssociations API Call")
             query_log_details = route53resolver.list_resolver_query_log_config_associations()
-            for query_log_vpc_id in query_log_details['ResolverQueryLogConfigAssociations']:
-                QueryLogList.append(query_log_vpc_id['ResourceId'])
+            QueryLogList: list = [
+                query_log_vpc_id['ResourceId']
+                for query_log_vpc_id in query_log_details[
+                    'ResolverQueryLogConfigAssociations'
+                ]
+            ]
+
             r53_working_list = (list(set(VPCList) - set(QueryLogList)))
-            logging.info("List of VPCs found within account " + account_number + ", region " + aws_region + " WITHOUT Route 53 Query Logs:")
+            logging.info(
+                f"List of VPCs found within account {account_number}, region {aws_region} WITHOUT Route 53 Query Logs:"
+            )
+
             print(r53_working_list)
             for no_query_logs in r53_working_list:
-                logging.info(no_query_logs + " does not have Route 53 Query logging on. Running Assisted Log Enabler for AWS will turn this on.")
+                logging.info(
+                    f"{no_query_logs} does not have Route 53 Query logging on. Running Assisted Log Enabler for AWS will turn this on."
+                )
+
         except Exception as exception_handle:
             logging.error(exception_handle)
 
